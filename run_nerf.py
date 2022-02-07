@@ -179,6 +179,7 @@ def create_nerf(args):
     """Instantiate NeRF's MLP model.
     """
     embed_fn, input_ch = get_embedder(args.multires, args.i_embed)
+                                    # multires = 10, positional encodeing's L,  viewing direction'L = multires_views
 
     input_ch_views = 0
     embeddirs_fn = None
@@ -500,7 +501,7 @@ def config_parser():
 
     ## blender flags
     parser.add_argument("--white_bkgd", action='store_true', 
-                        help='set to render synthetic data on a white bkgd (always use for dvoxels)')
+                        help='set to render synthetic data on a white bkgd (always use for dvoxels)') #흰 배경에 데이터 렌더링하는지
     parser.add_argument("--half_res", action='store_true', 
                         help='load blender synthetic data at 400x400 instead of 800x800')
 
@@ -566,7 +567,7 @@ def train():
             far = 1.
         print('NEAR FAR', near, far)
 
-    elif args.dataset_type == 'blender':
+    elif args.dataset_type == 'blender': # 그 투명 배경에 물체만 있는 그런 데이터셋 인가봐
         images, poses, render_poses, hwf, i_split = load_blender_data(args.datadir, args.half_res, args.testskip)
         print('Loaded blender', images.shape, render_poses.shape, hwf, args.datadir)
         i_train, i_val, i_test = i_split
@@ -574,8 +575,8 @@ def train():
         near = 2.
         far = 6.
 
-        if args.white_bkgd:
-            images = images[...,:3]*images[...,-1:] + (1.-images[...,-1:])
+        if args.white_bkgd: #물체 흰색 배경에 합성하는지
+            images = images[...,:3]*images[...,-1:] + (1.-images[...,-1:]) #투명인 곳 흰색으로 만든다.?? 컬러 배치 확인해야해 rgba인지 뭔지
         else:
             images = images[...,:3]
 
@@ -619,11 +620,11 @@ def train():
             [0, 0, 1]
         ])
 
-    if args.render_test:
+    if args.render_test: # render pose path 대신 test set으로 렌더링
         render_poses = np.array(poses[i_test])
 
-    # Create log dir and copy the config file
-    basedir = args.basedir
+    # Create log dir and copy the config file, logs에 폴더 생성
+    basedir = args.basedir  #./logs
     expname = args.expname
     os.makedirs(os.path.join(basedir, expname), exist_ok=True)
     f = os.path.join(basedir, expname, 'args.txt')
