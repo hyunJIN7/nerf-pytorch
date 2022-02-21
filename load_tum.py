@@ -47,7 +47,7 @@ def load_tum_data(basedir,tum_num_keyframe=150):
 
     """select key frame"""
     #indexs = select_keyframe(rot_mats)
-    indexs = np.linspace(0, len(image_list), min(len(image_list),tum_num_keyframe),endpoint=False).astype(int)
+    indexs = np.linspace(0, len(image_list), min(len(image_list),tum_num_keyframe),endpoint=False, dtype=int) #.astype(int)
 
     """final select image,poses"""
     imgs=[]
@@ -74,8 +74,8 @@ def load_tum_data(basedir,tum_num_keyframe=150):
     # TODO: change, Train, Val, Test ratio
     counts = [0]
     n = poses.shape[0]
-    counts.append(n*0.7)
-    counts.append(counts[-1] + n*0.15)
+    counts.append((int)(n*0.7))
+    counts.append(counts[-1] + (int)(n*0.15) )
     counts.append(n)
     i_split = [np.arange(counts[i], counts[i+1]) for i in range(3)]
     return imgs, poses, render_poses, [H, W, focal], K , i_split

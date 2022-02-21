@@ -661,7 +661,7 @@ def train():
     elif args.dataset_type == 'tum':
         images, poses, render_poses, hwf, K, i_split = load_tum_data(basedir=args.datadir, tum_num_keyframe=args.tum_num_keyframe)
 
-        print('Loaded tum', images.shape, render_poses.shape, hwf, args.datadir)
+        #print('Loaded tum', images.shape, render_poses.shape, hwf, args.datadir)
         i_train, i_val, i_test = i_split
 
         near = 2.
@@ -943,7 +943,7 @@ def train():
 
         global_step += 1
 
-
+#python run_nerf.py --config configs/fr3_teddy.txt
 if __name__=='__main__':
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 

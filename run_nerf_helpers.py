@@ -21,27 +21,27 @@ class Embedder:
         embed_fns = []
         d = self.kwargs['input_dims']    #d=3
         out_dim = 0
-        if self.kwargs['include_input']:
+        if self.kwargs['include_input']:  #여기 파트 왜 있냐
             embed_fns.append(lambda x : x)
             out_dim += d
             
-        max_freq = self.kwargs['max_freq_log2']
-        N_freqs = self.kwargs['num_freqs']
+        max_freq = self.kwargs['max_freq_log2']   # 9
+        N_freqs = self.kwargs['num_freqs']  # 10 L
         
         if self.kwargs['log_sampling']:
             freq_bands = 2.**torch.linspace(0., max_freq, steps=N_freqs)
         else:
             freq_bands = torch.linspace(2.**0., 2.**max_freq, steps=N_freqs)
-            
+        # positional encode main part, embed_fns에 람다 함수 쌓기
         for freq in freq_bands:
             for p_fn in self.kwargs['periodic_fns']:
                 embed_fns.append(lambda x, p_fn=p_fn, freq=freq : p_fn(x * freq))
-                out_dim += d
+                out_dim += d   # +=3
                     
-        self.embed_fns = embed_fns
-        self.out_dim = out_dim
+        self.embed_fns = embed_fns  # len : 2*L (+1)
+        self.out_dim = out_dim  # 63.... include_input true  +out_dim
         
-    def embed(self, inputs):
+    def embed(self, inputs): #선언해준 임베딩 함수에 위치값들 넣어줌
         return torch.cat([fn(inputs) for fn in self.embed_fns], -1)
 
 
@@ -71,11 +71,12 @@ class NeRF(nn.Module):
         super(NeRF, self).__init__()
         self.D = D
         self.W = W
-        self.input_ch = input_ch
-        self.input_ch_views = input_ch_views
+        self.input_ch = input_ch    #60 or 63
+        self.input_ch_views = input_ch_views  #24 or 27
         self.skips = skips
         self.use_viewdirs = use_viewdirs
-        
+
+        #256 channels의 fully-connected layers, 5[4]번째 layer에선 초기 인풋 다시 넣어줌.
         self.pts_linears = nn.ModuleList(
             [nn.Linear(input_ch, W)] + [nn.Linear(W, W) if i not in self.skips else nn.Linear(W + input_ch, W) for i in range(D-1)])
         
@@ -85,21 +86,22 @@ class NeRF(nn.Module):
         ### Implementation according to the paper
         # self.views_linears = nn.ModuleList(
         #     [nn.Linear(input_ch_views + W, W//2)] + [nn.Linear(W//2, W//2) for i in range(D//2)])
-        
+
+        # 128-> RGB  final layer??
         if use_viewdirs:
-            self.feature_linear = nn.Linear(W, W)
+            self.feature_linear = nn.Linear(W, W)  #여기  파트 뭐지,
             self.alpha_linear = nn.Linear(W, 1)
             self.rgb_linear = nn.Linear(W//2, 3)
         else:
             self.output_linear = nn.Linear(W, output_ch)
 
     def forward(self, x):
-        input_pts, input_views = torch.split(x, [self.input_ch, self.input_ch_views], dim=-1)
+        input_pts, input_views = torch.split(x, [self.input_ch, self.input_ch_views], dim=-1) # x : embeded(1024*64,3)
         h = input_pts
         for i, l in enumerate(self.pts_linears):
             h = self.pts_linears[i](h)
             h = F.relu(h)
-            if i in self.skips:
+            if i in self.skips:  # 중간에 positional encoding 추가로 넣어주는 파트
                 h = torch.cat([input_pts, h], -1)
 
         if self.use_viewdirs:
@@ -150,15 +152,17 @@ class NeRF(nn.Module):
 
 
 # Ray helpers
-def get_rays(H, W, K, c2w):
+def get_rays(H, W, K, c2w): #ray
     i, j = torch.meshgrid(torch.linspace(0, W-1, W), torch.linspace(0, H-1, H))  # pytorch's meshgrid has indexing='ij'
-    i = i.t()
+    i = i.t()  # transpose
     j = j.t()
-    dirs = torch.stack([(i-K[0][2])/K[0][0], -(j-K[1][2])/K[1][1], -torch.ones_like(i)], -1)
+
+    dirs = torch.stack([(i-K[0][2])/K[0][0], -(j-K[1][2])/K[1][1], -torch.ones_like(i)], -1)  #(H,W,3)
     # Rotate ray directions from camera frame to the world frame
-    rays_d = torch.sum(dirs[..., np.newaxis, :] * c2w[:3,:3], -1)  # dot product, equals to: [c2w.dot(dir) for dir in dirs]
+    rays_d = torch.sum(dirs[..., np.newaxis, :] * c2w[:3,:3], -1)  #
+                            # dot product, equals to: [c2w.dot(dir) for dir in dirs]  ...element-wise랑 dot이 결과 같게 나온다고?
     # Translate camera frame's origin to the world frame. It is the origin of all rays.
-    rays_o = c2w[:3,-1].expand(rays_d.shape)
+    rays_o = c2w[:3,-1].expand(rays_d.shape)  #(WorH,WorH,3)
     return rays_o, rays_d
 
 
@@ -196,16 +200,19 @@ def ndc_rays(H, W, focal, near, rays_o, rays_d):
 def sample_pdf(bins, weights, N_samples, det=False, pytest=False):
     # Get pdf
     weights = weights + 1e-5 # prevent nans
-    pdf = weights / torch.sum(weights, -1, keepdim=True)
-    cdf = torch.cumsum(pdf, -1)
+    pdf = weights / torch.sum(weights, -1, keepdim=True) #(1024,62), sec5.2의 수식 , 맨 앞뒤 포인트의 웨이트는 빼고 보냈기 때문
+    cdf = torch.cumsum(pdf, -1) #(1024,62), pdf의 누적합  cusum : yi = x1+x2 +...+xi,
     cdf = torch.cat([torch.zeros_like(cdf[...,:1]), cdf], -1)  # (batch, len(bins))
+                                    #(1024,63) 앞에 0추가해줌
 
     # Take uniform samples
     if det:
         u = torch.linspace(0., 1., steps=N_samples)
         u = u.expand(list(cdf.shape[:-1]) + [N_samples])
     else:
-        u = torch.rand(list(cdf.shape[:-1]) + [N_samples])
+        u = torch.rand( list(cdf.shape[:-1]) + [N_samples] ) # 한 ray [batch, fine에서 추가로 추출할 샘플 수]
+        #N_samples : fine network 에서 추가로 추출한 샘플 수
+        #u : [1024,128]
 
     # Pytest, overwrite u with numpy's fixed random numbers
     if pytest:
@@ -217,18 +224,18 @@ def sample_pdf(bins, weights, N_samples, det=False, pytest=False):
         else:
             u = np.random.rand(*new_shape)
         u = torch.Tensor(u)
-
+    #TODO : invert CDF 이해하기
     # Invert CDF
-    u = u.contiguous()
-    inds = torch.searchsorted(cdf, u, right=True)
+    u = u.contiguous()  #비연속적 tensor 연속적으로 만들기
+    inds = torch.searchsorted(cdf, u, right=True)  #inverse cdf? important
     below = torch.max(torch.zeros_like(inds-1), inds-1)
-    above = torch.min((cdf.shape[-1]-1) * torch.ones_like(inds), inds)
-    inds_g = torch.stack([below, above], -1)  # (batch, N_samples, 2)
+    above = torch.min((cdf.shape[-1]-1) * torch.ones_like(inds), inds) #62*1
+    inds_g = torch.stack([below, above], -1)  # (batch, N_samples, 2)   값이 대부분(inds-1,inds) index
 
     # cdf_g = tf.gather(cdf, inds_g, axis=-1, batch_dims=len(inds_g.shape)-2)
     # bins_g = tf.gather(bins, inds_g, axis=-1, batch_dims=len(inds_g.shape)-2)
     matched_shape = [inds_g.shape[0], inds_g.shape[1], cdf.shape[-1]]
-    cdf_g = torch.gather(cdf.unsqueeze(1).expand(matched_shape), 2, inds_g)
+    cdf_g = torch.gather(cdf.unsqueeze(1).expand(matched_shape), 2, inds_g)   #뭘 의미하는건지 모르겠다
     bins_g = torch.gather(bins.unsqueeze(1).expand(matched_shape), 2, inds_g)
 
     denom = (cdf_g[...,1]-cdf_g[...,0])

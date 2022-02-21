@@ -42,7 +42,7 @@ def load_blender_data(basedir, half_res=False, testskip=1):
             metas[s] = json.load(fp)
 
     all_imgs = []
-    all_poses = []
+    all_poses = []  # camer2world or world2camera??
     counts = [0]   # 0, train, train+test,train+test+val 개수 담김
     for s in splits:
         meta = metas[s]
@@ -74,6 +74,7 @@ def load_blender_data(basedir, half_res=False, testskip=1):
     focal = .5 * W / np.tan(.5 * camera_angle_x) # focal length , note에 그림
     
     render_poses = torch.stack( [pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180,180,40+1)[:-1]], 0)
+    #TODO: 이해하기
     """
         linspace(start,end,num) start,end를 num개의 일정한 간격으로 요소 만든다. default=true로 만 마지막 값(180)까지 
         [:-1] : 인것으로 보아 마지막꺼 안가져오나봐.. 그럴꺼면 false로 하지
