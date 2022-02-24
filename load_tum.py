@@ -1,4 +1,3 @@
-import os
 import pickle
 from tqdm import tqdm
 
@@ -11,6 +10,8 @@ import cv2
 from transforms3d.quaternions import quat2mat
 from load_data_helpers import *
 
+np.random.seed(0)
+
 def select_keyframe(img_list,pose_list, min_angle=15, min_distance=0.1):
     line_data = np.array(pose_list, dtype=float)# timestamp tx ty tz qx qy qz qw
     fid = line_data[0]  # 0부터 그냥 순번인듯
@@ -20,12 +21,16 @@ def select_keyframe(img_list,pose_list, min_angle=15, min_distance=0.1):
 
     return trans,rot_mat
 
-def load_tum_data(basedir,tum_num_keyframe=150):
+def load_tum_data(basedir,tum_num_keyframe=120):
     #load -> sync -> selection (quater -> rotation)
 
     #instrin
-    K = [[535.4,0,320.1],[0,539.2,247,6],[0,0,1]]
-    #TODO: H,W
+    # K = [[535.4,0,320.1],
+    #      [0,539.2,247,6],
+    #      [0,0,1]]
+    K = [[ 517.3,0,318.6],
+         [0,516.5,255.3],
+         [0,0,1]]
 
 
     #load image list(rgb.txt)
@@ -69,13 +74,26 @@ def load_tum_data(basedir,tum_num_keyframe=150):
 
     render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180, 180, 40 + 1)[:-1]], 0)
     H, W = imgs[0].shape[:2]
-    focal = 535.4  #TODO : .......
+    #focal = 535.4  #TODO : .......how to find focal ....
+    focal =  517
 
     # TODO: change, Train, Val, Test ratio
-    counts = [0]
-    n = poses.shape[0]
-    counts.append((int)(n*0.7))
-    counts.append(counts[-1] + (int)(n*0.15) )
-    counts.append(n)
-    i_split = [np.arange(counts[i], counts[i+1]) for i in range(3)]
+    """
+        여기 전체를 트레인 데이터 셋으로 하고 전체 개수에서 일정 개수만 랜덤으로 번호 골라서 val,test로 하게 코드 바꾸기 
+    """
+    # counts = [0]
+    # n = poses.shape[0]
+    # counts.append((int)(n*0.8))
+    # counts.append(counts[-1] + (int)(n*0.15))
+    # counts.append(n)
+    # i_split = [np.arange(counts[i], counts[i+1]) for i in range(3)]
+
+    i_split = []
+    n = poses.shape[0] # count of image
+    train_indexs = np.linspace(0, n, (int)(n*0.8), endpoint=False, dtype=int)
+    i_split.append(train_indexs)
+    val_indexs = np.linspace(0, n, (int)(n*0.2), endpoint=False, dtype=int)
+    i_split.append(val_indexs)
+    test_indexs = np.random.choice(n, (int)(n*0.2))
+    i_split.append(test_indexs)
     return imgs, poses, render_poses, [H, W, focal], K , i_split

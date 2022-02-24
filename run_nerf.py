@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from tqdm import tqdm, trange
 
 import matplotlib.pyplot as plt
+import gc
 
 from run_nerf_helpers import *
 
@@ -137,7 +138,7 @@ def render(H, W, K, chunk=1024*32, rays=None, c2w=None, ndc=True,
     return ret_list + [ret_dict]   #rgb, disp, acc, extras
 
 
-def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedir=None, render_factor=0):
+def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedir=None,savedir_depth=None, render_factor=0):
 
     H, W, focal = hwf
 
@@ -170,6 +171,21 @@ def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedi
             rgb8 = to8b(rgbs[-1])
             filename = os.path.join(savedir, '{:03d}.png'.format(i))
             imageio.imwrite(filename, rgb8)
+            #TODO:ADD Depth image
+            depth_filename = os.path.join(savedir_depth, '{:03d}.png'.format(i))
+            depth8 = to8b(disps[-1] / np.max(disps[-1]))  #TODO : shape check error why???
+            imageio.imwrite(depth_filename, depth8)
+            """
+            error message : raise ValueError("Image must be 2D (grayscale, RGB, or RGBA).")
+                            ValueError: Image must be 2D (grayscale, RGB, or RGBA).
+
+            to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
+            
+            
+            moviebase = os.path.join(basedir, expname, '{}_spiral_{:06d}_'.format(expname, i))
+            imageio.mimwrite(moviebase + 'rgb.mp4', to8b(rgbs), fps=30, quality=8)
+            imageio.mimwrite(moviebase + 'disp.mp4', to8b(disps / np.max(disps)), fps=30, quality=8)
+            """
 
 
     rgbs = np.stack(rgbs, 0)
@@ -567,7 +583,7 @@ def config_parser():
     #                     help='will take 6/10 images as tum test set')
     # parser.add_argument("--tumhold", type=int, default=8,
     #                     help='will take every 1/N images as LLFF test set, paper uses 8')
-    parser.add_argument("--tum_num_keyframe", type=int, default=150,
+    parser.add_argument("--tum_num_keyframe", type=int, default=120,
                         help='num key frame')
 
     # logging/saving options
@@ -678,6 +694,7 @@ def train():
         print('Unknown dataset type', args.dataset_type, 'exiting')
         return
 
+
     # Cast intrinsics to right types
     H, W, focal = hwf
     H, W = int(H), int(W)
@@ -706,6 +723,13 @@ def train():
         f = os.path.join(basedir, expname, 'config.txt')
         with open(f, 'w') as file:
             file.write(open(args.config, 'r').read())
+
+
+    # TODO : test_pose.txt save code, for depth to point cloud, after making exp directory
+    # test pose -> .txt save
+    test_pose_savedir = os.path.join(args.basedir, args.expname, 'test_poses')
+    np.save(test_pose_savedir, poses[i_test])
+
 
     # Create nerf model
     render_kwargs_train, render_kwargs_test, start, grad_vars, optimizer = create_nerf(args)
@@ -781,7 +805,7 @@ def train():
     start = start + 1
     for i in trange(start, N_iters): #1~200000,  trange : progress bar
         time0 = time.time()
-        i = 50000  #TODO: erase
+        # i = 50000  #TODO: erase
         # Sample random ray batch
         if use_batching:
             # Random over all images
@@ -862,6 +886,7 @@ def train():
         # print(f"Step: {global_step}, Loss: {loss}, Time: {dt}")
         #####           end            #####
 
+
         # Rest is logging
         if i%args.i_weights==0:
             path = os.path.join(basedir, expname, '{:06d}.tar'.format(i))
@@ -892,9 +917,13 @@ def train():
         if i%args.i_testset==0 and i > 0:
             testsavedir = os.path.join(basedir, expname, 'testset_{:06d}'.format(i))
             os.makedirs(testsavedir, exist_ok=True)
+            testsavedir_depth = os.path.join(basedir, expname, 'testset_depth_{:06d}'.format(i))
+            os.makedirs(testsavedir, exist_ok=True)
+            os.makedirs(testsavedir_depth, exist_ok=True)
             print('test poses shape', poses[i_test].shape)
             with torch.no_grad():
-                render_path(torch.Tensor(poses[i_test]).to(device), hwf, K, args.chunk, render_kwargs_test, gt_imgs=images[i_test], savedir=testsavedir)
+                render_path(torch.Tensor(poses[i_test]).to(device), hwf, K, args.chunk, render_kwargs_test, gt_imgs=images[i_test], savedir=testsavedir, savedir_depth=testsavedir_depth)
+                # savedir_depth
             print('Saved test set')
 
         if i%args.i_print==0:
@@ -943,8 +972,13 @@ def train():
 
         global_step += 1
 
-#python run_nerf.py --config configs/fr3_teddy.txt
+#python run_nerf.py --config configs/fr3_teddy.txt --N_rand 1024
+#python run_nerf.py --config configs/lego.txt --N_rand 256
 if __name__=='__main__':
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
+    """clear GPU cache"""
+    gc.collect()
+    torch.cuda.empty_cache()
 
     train()

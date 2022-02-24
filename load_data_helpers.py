@@ -54,18 +54,18 @@ def dir2list(dir):
     return list
 
 """sync time between image and pose"""
-def sync_time_image_pose_ver2(image_list,gt_list):
-    sync_gt_list =[]
-    for i,img_line in enumerate(image_list): # TODO : i = index 이렇게 더 효율있게 할 수 있 , i starts 0
-        timestamp = (float)(img_line[0])
-
-        index = 0
-        while index < len(gt_list)-2:
-            if abs(timestamp - (float)(gt_list[index][0]) ) >= abs(timestamp - (float)(gt_list[index+1][0])):
-                index+=1;
-            else: break
-        sync_gt_list.append(gt_list[index])
-    return sync_gt_list
+# def sync_time_image_pose_ver2(image_list,gt_list):
+#     sync_gt_list =[]
+#     for i,img_line in enumerate(image_list): # TODO : i = index 이렇게 더 효율있게 할 수 있 , i starts 0
+#         timestamp = (float)(img_line[0])
+#
+#         index = 0
+#         while index < len(gt_list)-2:
+#             if abs(timestamp - (float)(gt_list[index][0]) ) >= abs(timestamp - (float)(gt_list[index+1][0])):
+#                 index+=1;
+#             else: break
+#         sync_gt_list.append(gt_list[index])
+#     return sync_gt_list
 def sync_time_image_pose(image_list,gt_list):
     sync_gt_list =[]
     gt_list = np.array(gt_list).astype(np.float32)
