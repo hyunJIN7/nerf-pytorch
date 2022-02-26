@@ -680,8 +680,8 @@ def train():
         #print('Loaded tum', images.shape, render_poses.shape, hwf, args.datadir)
         i_train, i_val, i_test = i_split
 
-        near = 2.
-        far = 6.
+        near = 0.5
+        far = 4.
 
         if args.white_bkgd:  # 물체 흰색 배경에 합성하는지
             images = images[..., :3] * images[..., -1:] + (
