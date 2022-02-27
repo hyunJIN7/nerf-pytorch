@@ -1,7 +1,3 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 import pickle
 from tqdm import tqdm
 
@@ -12,140 +8,133 @@ import json
 import torch.nn.functional as F
 import cv2
 from transforms3d.quaternions import quat2mat
-from bisect import bisect_left,bisect_right
+from load_data_helpers import *
 
+np.random.seed(0)
+def rotx(t):
+    ''' 3D Rotation about the x-axis. '''
+    c = np.cos(t)
+    s = np.sin(t)
+    return np.array([[1, 0, 0],
+                     [0, c, -s],
+                     [0, s, c]])
 
-trans_t = lambda t : torch.Tensor([ #z축 이동
-    [1,0,0,0],
-    [0,1,0,0],
-    [0,0,1,t],
-    [0,0,0,1]]).float()
+def load_camera_pose(cam_pose_dir): # SyncedPose.txt
+    if cam_pose_dir is not None and os.path.isfile(cam_pose_dir):
+        pass
+    else:
+        raise FileNotFoundError("Given camera pose dir:{} not found"
+                                .format(cam_pose_dir))
 
-rot_phi = lambda phi : torch.Tensor([  #rotation about x-axis
-    [1,0,0,0],
-    [0,np.cos(phi),-np.sin(phi),0],
-    [0,np.sin(phi), np.cos(phi),0],
-    [0,0,0,1]]).float()
+    pose = []
+    def process(line_data_list):  #syncedpose.txt
+        # imageNum(string) tx ty tz(m) qx qy qz qw
+        line_data = np.array(line_data_list, dtype=float)
+        # fid = line_data_list[0] #0부터
+        trans = line_data[1:4]
+        quat = line_data[4:]  #x,y,z,w 순?
+        rot_mat = quat2mat(np.append(quat[-1], quat[:3]).tolist())
+                            # 여기선 (w,x,y,z) 순 인듯
+        #TODO:check
+        # rot_mat = rot_mat.dot(np.array([  #axis flip..?
+        #     [1, 0, 0],
+        #     [0, -1, 0],
+        #     [0, 0, -1]
+        # ]))
+        # rot_mat = rotx(np.pi / 2) @ rot_mat #3D Rotation about the x-axis.
+        # trans = rotx(np.pi / 2) @ trans
+        trans_mat = np.zeros([3, 4])
+        trans_mat[:3, :3] = rot_mat
+        trans_mat[:3, 3] = trans
+        trans_mat = np.vstack((trans_mat, [0, 0, 0, 1]))
+        pose.append(trans_mat)
 
-rot_theta = lambda th : torch.Tensor([ #rotation about y-axis
-    [np.cos(th),0,-np.sin(th),0],
-    [0,1,0,0],
-    [np.sin(th),0, np.cos(th),0],
-    [0,0,0,1]]).float()
-
-                 #(angle, -30.0, 4.0)
-def pose_spherical(theta, phi, radius):
-    c2w = trans_t(radius)
-    c2w = rot_phi(phi/180.*np.pi) @ c2w  # @ : pytorch 에서 행렬곱
-    c2w = rot_theta(theta/180.*np.pi) @ c2w
-    c2w = torch.Tensor(np.array([[-1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])) @ c2w
-    return c2w
-
-
-
-def extract_frames(video_path, out_folder, size):
-    """mp4 to image frame"""
-    cap = cv2.VideoCapture(video_path)
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    for i in tqdm(range(frame_count)): #TODO : file
-        ret, frame = cap.read()
-        if ret is not True:
-            break
-        frame = cv2.resize(frame, size)
-        cv2.imwrite(os.path.join(out_folder, str(i).zfill(5) + '.jpg'), frame)
-
-
-def dir2list(dir):
-    list = []
-    assert os.path.isfile(dir), "rgb list info:{} not found".format(dir)
-    with open(dir, "r") as f:
-        list_lines = f.readlines()
-    for line in list_lines[3:]:
-        line_data_list = line.split(' ')
-        if len(line_data_list) == 0:
-            continue
-        list.append([i for i in line_data_list])
-    return list
-
-"""sync time between image and pose"""
-# def sync_time_image_pose_ver2(image_list,gt_list):
-#     sync_gt_list =[]
-#     for i,img_line in enumerate(image_list): # TODO : i = index 이렇게 더 효율있게 할 수 있 , i starts 0
-#         timestamp = (float)(img_line[0])
-#
-#         index = 0
-#         while index < len(gt_list)-2:
-#             if abs(timestamp - (float)(gt_list[index][0]) ) >= abs(timestamp - (float)(gt_list[index+1][0])):
-#                 index+=1;
-#             else: break
-#         sync_gt_list.append(gt_list[index])
-#     return sync_gt_list
-def sync_time_image_pose(image_list,gt_list):#for tum
-    sync_gt_list =[]
-    gt_list = np.array(gt_list).astype(np.float32)
-    for i,img_line in enumerate(image_list): # TODO : i = index 이렇게 더 효율있게 할 수 있 , i starts 0
-        timestamp = (float)(img_line[0])
-        left_index = bisect_left(gt_list[:, 0], timestamp)
-        if left_index >= gt_list.shape[0]-1 : left_index=gt_list.shape[0]-2
-        if abs(timestamp - gt_list[left_index][0]) > abs(timestamp - gt_list[left_index + 1][0]):
-            sync_gt_list.append(gt_list[left_index+1])
-        else: sync_gt_list.append(gt_list[left_index])
-    return sync_gt_list
-
-"""for arkit"""
-def sync_intrinsics_and_poses(cam_file, pose_file, out_file):
-    """Load camera intrinsics"""  # frane.txt -> camera intrinsics
-    assert os.path.isfile(cam_file), "camera info:{} not found".format(cam_file)
-    with open(cam_file, "r") as f:  # frame.txt 읽어서
-        cam_intrinsic_lines = f.readlines()
-
-    cam_intrinsics = []
-    for line in cam_intrinsic_lines:
-        line_data_list = line.split(',')
-        if len(line_data_list) == 0:
-            continue
-        cam_intrinsics.append([float(i) for i in line_data_list])
-        # frame.txt -> cam_instrinsic
-    K = np.array([
-            [cam_intrinsics[0][2], 0, cam_intrinsics[0][4]],
-            [0, cam_intrinsics[0][3], cam_intrinsics[0][5]],
-            [0, 0, 1]
-        ])
-    #이미지 사이즈 변경에 따른 instrinsic 변화는 아래에 있음
-
-
-    """load camera poses"""  # ARPose.txt -> camera pose  gt
-    assert os.path.isfile(pose_file), "camera info:{} not found".format(pose_file)
-    with open(pose_file, "r") as f:
+    with open(cam_pose_dir, "r") as f:
         cam_pose_lines = f.readlines()
-
-    cam_poses = []
-    for line in cam_pose_lines:
-        line_data_list = line.split(',')
+    for cam_line in cam_pose_lines:
+        line_data_list = cam_line.split(" ")
         if len(line_data_list) == 0:
             continue
-        cam_poses.append([float(i) for i in line_data_list])
+        process(line_data_list)
 
-    """ outputfile로 syncpose 맞춰서 내보냄  """
-    lines = []
-    ip = 0
-    length = len(cam_poses)
-
-    for i in range(len(cam_intrinsics)):
-        while ip + 1 < length and abs(cam_poses[ip + 1][0] - cam_intrinsics[i][0]) < abs(
-                cam_poses[ip][0] - cam_intrinsics[i][0]):
-            ip += 1
-        cam_pose = cam_poses[ip][:4] + cam_poses[ip][5:] + [cam_poses[ip][4]]
-        line = [str(a) for a in cam_pose] #time,tx,ty,tz,qx,qy,qz,qw
-        line[0] = str(i).zfill(5)
-        lines.append(' '.join(line) + '\n')
-
-    dirname = os.path.dirname(out_file)
-    if not os.path.exists(dirname):
-        os.makedirs(dirname)
-
-    with open(out_file, 'w') as f:
-        f.writelines(lines)
+    return pose
 
 
-    return K
+def load_tum_data(basedir, min_angle=20,min_distance=0.1,ori_size=(1920, 1440), size=(640, 480)):
+
+    # save image
+    print('Extract images from video...')
+    video_path = os.path.join(basedir, 'Frames.m4v')
+    image_path = os.path.join(basedir, 'rgb')
+    if not os.path.exists(image_path):
+        os.mkdir(image_path)
+        extract_frames(video_path, out_folder=image_path, size=size) #조건문 안으로 넣음
+
+
+    # load intrin and extrin
+    print('Load intrinsics and extrinsics')
+    K = sync_intrinsics_and_poses(os.path.join(basedir, 'Frames.txt'), os.path.join(basedir, 'ARposes.txt'),
+                            os.path.join(basedir, 'SyncedPoses.txt'))
+    K[0,:] /= (ori_size[0] / size[0])             #image num(string) time(s) tx ty tz(m) qx qy qz qw
+    K[1, :] /= (ori_size[1] / size[1])
+
+    #quat -> rot
+    all_cam_pose = load_camera_pose(os.path.join(basedir, 'SyncedPoses.txt'))
+
+
+    """Keyframes selection"""
+    all_ids = [0]
+    last_pose = all_cam_pose[0]
+    for i in range(len(all_cam_pose)):
+        cam_intrinsic = K
+        cam_pose = all_cam_pose[i]
+
+        # translation->0.1m,rotation->15도 max 값 기준 넘는 것만 select
+        angle = np.arccos(  # cos역함수  TODO: 여기 계산 과정 확인
+            ((np.linalg.inv(cam_pose[:3, :3]) @ last_pose[:3, :3] @ np.array([0, 0, 1]).T) * np.array(
+                [0, 0, 1])).sum())
+        # extrinsice rotation 뽑아 inverse @  그 전 pose rotation @
+        # rotation 사이 연산 후 accose 으로 각 알아내는
+        dis = np.linalg.norm(cam_pose[:3, 3] - last_pose[:3, 3])
+        # 기준값
+        if angle > (min_angle / 180) * np.pi or dis > min_distance:
+            all_ids.append(i)
+            last_pose = cam_pose
+
+
+    """final select image,poses"""
+    image_dir = os.path.join(basedir, 'rgb')
+    imgs = []
+    poses = []
+    for i in all_ids:
+        image_file_name = os.path.join(image_dir, str(i).zfill(5) + '.jpg')
+        imgs.append(imageio.imread(image_file_name))
+        poses.append(all_cam_pose[i])
+    imgs = (np.array(imgs) / 255.).astype(np.float32)
+    poses = np.array(poses).astype(np.float32)
+
+    render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180, 180, 40 + 1)[:-1]], 0)
+    H, W = imgs[0].shape[:2]
+    #TODO : .......how to find focal ....
+    focal = K[0][0]
+
+    # TODO: change, Train, Val, Test ratio
+    """
+        여기 전체를 트레인 데이터 셋으로 하고 전체 개수에서 일정 개수만 랜덤으로 번호 골라서 val,test로 하게 코드 바꾸기 
+    """
+    # counts = [0]
+    # n = poses.shape[0]
+    # counts.append((int)(n*0.8))
+    # counts.append(counts[-1] + (int)(n*0.15))
+    # counts.append(n)
+    # i_split = [np.arange(counts[i], counts[i+1]) for i in range(3)]
+
+    i_split = []
+    n = poses.shape[0]  # count of image
+    train_indexs = np.linspace(0, n, (int)(n * 0.8), endpoint=False, dtype=int)
+    i_split.append(train_indexs)
+    val_indexs = np.linspace(0, n, (int)(n * 0.2), endpoint=False, dtype=int)
+    i_split.append(val_indexs)
+    test_indexs = np.random.choice(n, (int)(n * 0.2))
+    i_split.append(test_indexs)
+    return imgs, poses, render_poses, [H, W, focal], K, i_split

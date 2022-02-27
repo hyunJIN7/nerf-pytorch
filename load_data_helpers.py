@@ -42,7 +42,6 @@ def pose_spherical(theta, phi, radius):
     return c2w
 
 
-
 def extract_frames(video_path, out_folder, size):
     """mp4 to image frame"""
     cap = cv2.VideoCapture(video_path)
@@ -146,6 +145,4 @@ def sync_intrinsics_and_poses(cam_file, pose_file, out_file):
 
     with open(out_file, 'w') as f:
         f.writelines(lines)
-
-
     return K

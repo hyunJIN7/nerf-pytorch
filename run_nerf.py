@@ -602,7 +602,7 @@ def config_parser():
                         help='num key frame')
     parser.add_argument("--min_angle_keyframe", type=float, default=15,
                         help='minimum angle between key frames')
-    parser.add_argument("--min_distance_keyframe", type=float, default=0.5,
+    parser.add_argument("--min_distance_keyframe", type=float, default=0.1,
                         help='minimum distance between key frames')
 
     # logging/saving options
@@ -713,7 +713,7 @@ def train():
     # ARKit dataset
     elif args.dataset_type == 'arkit':
         images, poses, render_poses, hwf, K, i_split = load_arkit_data(basedir=args.datadir,
-                                                                       arkit_num_keyframe=args.tum_num_keyframe,
+                                                                       #arkit_num_keyframe=args.tum_num_keyframe,
                                                                        min_angle=args.min_angle_keyframe,
                                                                        min_distance=args.min_distance_keyframe)
 
@@ -1014,6 +1014,7 @@ def train():
 
 # python run_nerf.py --config configs/fr3_teddy.txt --N_rand 1024
 # python run_nerf.py --config configs/lego.txt --N_rand 256
+# python run_nerf.py --config configs/arkit_1.txt
 if __name__ == '__main__':
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
