@@ -25,7 +25,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 np.random.seed(0)
 DEBUG = False
 
-
 def batchify(fn, chunk):
     """Constructs a version of 'fn' that applies to smaller batches.
     """

@@ -60,7 +60,7 @@ def load_camera_pose(cam_pose_dir): # SyncedPose.txt
     return pose
 
 
-def load_tum_data(basedir, min_angle=20,min_distance=0.1,ori_size=(1920, 1440), size=(640, 480)):
+def load_arkit_data(basedir, min_angle=20,min_distance=0.1,ori_size=(1920, 1440), size=(640, 480)):
 
     # save image
     print('Extract images from video...')
@@ -69,7 +69,6 @@ def load_tum_data(basedir, min_angle=20,min_distance=0.1,ori_size=(1920, 1440), 
     if not os.path.exists(image_path):
         os.mkdir(image_path)
         extract_frames(video_path, out_folder=image_path, size=size) #조건문 안으로 넣음
-
 
     # load intrin and extrin
     print('Load intrinsics and extrinsics')
@@ -80,7 +79,6 @@ def load_tum_data(basedir, min_angle=20,min_distance=0.1,ori_size=(1920, 1440), 
 
     #quat -> rot
     all_cam_pose = load_camera_pose(os.path.join(basedir, 'SyncedPoses.txt'))
-
 
     """Keyframes selection"""
     all_ids = [0]
@@ -137,4 +135,5 @@ def load_tum_data(basedir, min_angle=20,min_distance=0.1,ori_size=(1920, 1440), 
     i_split.append(val_indexs)
     test_indexs = np.random.choice(n, (int)(n * 0.2))
     i_split.append(test_indexs)
+    print('train : {0} , val : {1} , test : {2}'.format(train_indexs.shape[0],val_indexs.shape[0],test_indexs.shape[0]))
     return imgs, poses, render_poses, [H, W, focal], K, i_split
