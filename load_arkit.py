@@ -27,22 +27,21 @@ def load_camera_pose(cam_pose_dir): # SyncedPose.txt
                                 .format(cam_pose_dir))
 
     pose = []
-    def process(line_data_list):  #syncedpose.txt
-        # imageNum(string) tx ty tz(m) qx qy qz qw
+    def process(line_data_list):  #syncedpose.txt  : imagenum(string) tx ty tz(m) qw qx qy qz
         line_data = np.array(line_data_list, dtype=float)
         # fid = line_data_list[0] #0부터
         trans = line_data[1:4]
-        quat = line_data[4:]  #x,y,z,w 순?
-        rot_mat = quat2mat(np.append(quat[-1], quat[:3]).tolist())
+        quat = line_data[4:]  #w,x,y,z
+        rot_mat = quat2mat(np.append(quat).tolist())
                             # 여기선 (w,x,y,z) 순 인듯
-        #TODO:check
-        # rot_mat = rot_mat.dot(np.array([  #axis flip..?
-        #     [1, 0, 0],
-        #     [0, -1, 0],
-        #     [0, 0, -1]
-        # ]))
-        # rot_mat = rotx(np.pi / 2) @ rot_mat #3D Rotation about the x-axis.
-        # trans = rotx(np.pi / 2) @ trans
+        #TODO :check
+        rot_mat = rot_mat.dot(np.array([  #axis flip..?
+            [1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1]
+        ]))
+        rot_mat = rotx(np.pi / 2) @ rot_mat #3D Rotation about the x-axis.
+        trans = rotx(np.pi / 2) @ trans
         trans_mat = np.zeros([3, 4])
         trans_mat[:3, :3] = rot_mat
         trans_mat[:3, 3] = trans
@@ -73,9 +72,9 @@ def load_arkit_data(basedir, min_angle=20,min_distance=0.1,ori_size=(1920, 1440)
     # load intrin and extrin
     print('Load intrinsics and extrinsics')
     K = sync_intrinsics_and_poses(os.path.join(basedir, 'Frames.txt'), os.path.join(basedir, 'ARposes.txt'),
-                            os.path.join(basedir, 'SyncedPoses.txt'))
-    K[0,:] /= (ori_size[0] / size[0])             #image num(string) time(s) tx ty tz(m) qx qy qz qw
-    K[1, :] /= (ori_size[1] / size[1])
+                            os.path.join(basedir, 'SyncedPoses.txt')) #imagenum(string) tx ty tz(m) qx qy qz qw
+    K[0,:] /= (ori_size[0] / size[0])
+    K[1, :] /= (ori_size[1] / size[1])  #resize 전 크기가 orgin_size 이기 때문에
 
     #quat -> rot
     all_cam_pose = load_camera_pose(os.path.join(basedir, 'SyncedPoses.txt'))
@@ -111,15 +110,21 @@ def load_arkit_data(basedir, min_angle=20,min_distance=0.1,ori_size=(1920, 1440)
     imgs = (np.array(imgs) / 255.).astype(np.float32)
     poses = np.array(poses).astype(np.float32)
 
+# 여기 셀렉된 이미지 이름 로데이션 매트릭스 따로 파일 만들어서 저장해두자
+    # dirname = os.path.dirname(out_file)
+    # if not os.path.exists(dirname):
+    #     os.makedirs(dirname)
+    #
+    # with open(out_file, 'w') as f:
+    #     f.writelines(lines)
+
+
     render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180, 180, 40 + 1)[:-1]], 0)
     H, W = imgs[0].shape[:2]
     #TODO : .......how to find focal ....
     focal = K[0][0]
 
-    # TODO: change, Train, Val, Test ratio
-    """
-        여기 전체를 트레인 데이터 셋으로 하고 전체 개수에서 일정 개수만 랜덤으로 번호 골라서 val,test로 하게 코드 바꾸기 
-    """
+    # TODO: change Train, Val, Test ratio
     # counts = [0]
     # n = poses.shape[0]
     # counts.append((int)(n*0.8))

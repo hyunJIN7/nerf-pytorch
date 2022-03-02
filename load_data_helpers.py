@@ -43,16 +43,17 @@ def pose_spherical(theta, phi, radius):
 
 
 def extract_frames(video_path, out_folder, size):
+    origin_size=[]
     """mp4 to image frame"""
     cap = cv2.VideoCapture(video_path)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    for i in tqdm(range(frame_count)): #TODO : file
+    for i in tqdm(range(frame_count)):
         ret, frame = cap.read()
         if ret is not True:
             break
-        frame = cv2.resize(frame, size)
+        frame = cv2.resize(frame, size) #이미지 사이즈 변경에 따른 instrinsic 변화는 아래에 있음
         cv2.imwrite(os.path.join(out_folder, str(i).zfill(5) + '.jpg'), frame)
-
+    return origin_size
 
 def dir2list(dir):
     list = []
@@ -110,8 +111,6 @@ def sync_intrinsics_and_poses(cam_file, pose_file, out_file):
             [0, cam_intrinsics[0][3], cam_intrinsics[0][5]],
             [0, 0, 1]
         ])
-    #이미지 사이즈 변경에 따른 instrinsic 변화는 아래에 있음
-
 
     """load camera poses"""  # ARPose.txt -> camera pose  gt
     assert os.path.isfile(pose_file), "camera info:{} not found".format(pose_file)
@@ -134,9 +133,9 @@ def sync_intrinsics_and_poses(cam_file, pose_file, out_file):
         while ip + 1 < length and abs(cam_poses[ip + 1][0] - cam_intrinsics[i][0]) < abs(
                 cam_poses[ip][0] - cam_intrinsics[i][0]):
             ip += 1
-        cam_pose = cam_poses[ip][:4] + cam_poses[ip][5:] + [cam_poses[ip][4]]
-        line = [str(a) for a in cam_pose] #time,tx,ty,tz,qx,qy,qz,qw
-        line[0] = str(i).zfill(5)
+        cam_pose = cam_poses[ip] #cam_poses[ip][:4] + cam_poses[ip][5:] + [cam_poses[ip][4]]
+        line = [str(a) for a in cam_pose] #time,tx,ty,tz,qw,qx,qy,qz
+        line[0] = str(i).zfill(5)  # name,tx,ty,tz,qw,qx,qy,qz
         lines.append(' '.join(line) + '\n')
 
     dirname = os.path.dirname(out_file)

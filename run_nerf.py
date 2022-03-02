@@ -720,7 +720,7 @@ def train():
         i_train, i_val, i_test = i_split
 
         near = 0.5
-        far = 4.
+        far = 6.
 
         if args.white_bkgd:  # 물체 흰색 배경에 합성하는지
             images = images[..., :3] * images[..., -1:] + (
@@ -1013,7 +1013,7 @@ def train():
 
 # python run_nerf.py --config configs/fr3_teddy.txt --N_rand 1024
 # python run_nerf.py --config configs/lego.txt --N_rand 256
-# python run_nerf.py --config configs/arkit_1.txt
+# python run_nerf.py --config configs/arkit_1.txt --N_rand 256
 if __name__ == '__main__':
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
