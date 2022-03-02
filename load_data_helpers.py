@@ -133,7 +133,7 @@ def sync_intrinsics_and_poses(cam_file, pose_file, out_file):
         while ip + 1 < length and abs(cam_poses[ip + 1][0] - cam_intrinsics[i][0]) < abs(
                 cam_poses[ip][0] - cam_intrinsics[i][0]):
             ip += 1
-        cam_pose = cam_poses[ip] #cam_poses[ip][:4] + cam_poses[ip][5:] + [cam_poses[ip][4]]
+        cam_pose = cam_poses[ip][:4] + cam_poses[ip][5:] + [cam_poses[ip][4]]
         line = [str(a) for a in cam_pose] #time,tx,ty,tz,qw,qx,qy,qz
         line[0] = str(i).zfill(5)  # name,tx,ty,tz,qw,qx,qy,qz
         lines.append(' '.join(line) + '\n')

@@ -27,12 +27,12 @@ def load_camera_pose(cam_pose_dir): # SyncedPose.txt
                                 .format(cam_pose_dir))
 
     pose = []
-    def process(line_data_list):  #syncedpose.txt  : imagenum(string) tx ty tz(m) qw qx qy qz
+    def process(line_data_list):  #syncedpose.txt  : imagenum(string) tx ty tz(m) qx qy qz qw
         line_data = np.array(line_data_list, dtype=float)
         # fid = line_data_list[0] #0부터
         trans = line_data[1:4]
-        quat = line_data[4:]  #w,x,y,z
-        rot_mat = quat2mat(np.append(quat).tolist())
+        quat = line_data[4:]
+        rot_mat = quat2mat(np.append(quat[-1], quat[:3]).tolist())
                             # 여기선 (w,x,y,z) 순 인듯
         #TODO :check
         rot_mat = rot_mat.dot(np.array([  #axis flip..?
